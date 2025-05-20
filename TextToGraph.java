@@ -1,6 +1,7 @@
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
+import java.security.SecureRandom; // 添加导入语句
 
 public class TextToGraph {
     private final Map<String, Map<String, Integer>> directedGraph;
@@ -17,15 +18,18 @@ public class TextToGraph {
         String imageFilePath = "./graph/directed_graph.png"; // 输出的图像文件路径
         
         // 确保目录存在
-        new File("./test").mkdirs();
-        new File("./graph").mkdirs();
-        
+        if (!new File("./test").mkdirs() && !new File("./test").exists()) {
+            System.err.println("警告：无法创建测试目录");
+        }
+        if (!new File("./graph").mkdirs() && !new File("./graph").exists()) {
+            System.err.println("警告：无法创建图形目录");
+        }
         // 添加文件选择功能
         if (args.length > 0) {
             filePath = args[0]; // 使用命令行参数指定的文件路径
         } else {
             // 提示用户选择文件
-            Scanner fileScanner = new Scanner(System.in);
+            Scanner fileScanner = new Scanner(System.in, "UTF-8");
             System.out.println("请选择文本文件输入方式：");
             System.out.println("1. 使用默认文件 (" + filePath + ")");
             System.out.println("2. 输入文件路径");
@@ -65,10 +69,55 @@ public class TextToGraph {
         
         // 确保测试文件存在
         File testFile = new File(filePath);
+        boolean useDefaultFile = false;
+
+        // 检查文件扩展名
+        String fileName = testFile.getName().toLowerCase();
+        if (!fileName.endsWith(".txt") && !fileName.endsWith(".text")) {
+            System.err.println("安全限制：只允许访问.txt或.text文件");
+            useDefaultFile = true;
+        }
+
+        // 安全检查：规范化路径并验证是否在允许的目录内
+        if (!useDefaultFile) {
+            try {
+                String canonicalPath = testFile.getCanonicalPath();
+                
+                // 定义允许访问的基础目录
+                File baseDir = new File("./test").getCanonicalFile();
+                File graphDir = new File("./graph").getCanonicalFile();
+                File currentDir = new File(".").getCanonicalFile();
+                
+                // 检查文件是否在允许的目录内
+                boolean isInAllowedDir = canonicalPath.startsWith(baseDir.getCanonicalPath()) || 
+                                        canonicalPath.startsWith(graphDir.getCanonicalPath()) ||
+                                        canonicalPath.startsWith(currentDir.getCanonicalPath());
+                
+                if (!isInAllowedDir) {
+                    System.err.println("安全限制：只能访问当前目录、test目录或graph目录下的文件");
+                    useDefaultFile = true;
+                }
+            } catch (IOException e) {
+                System.err.println("路径解析错误：" + e.getMessage());
+                useDefaultFile = true;
+            }
+        }
+
+        // 如果需要使用默认文件
+        if (useDefaultFile) {
+            System.out.println("使用默认文件: " + "./test/test1.txt");
+            filePath = "./test/test1.txt";
+            testFile = new File(filePath);
+        }
+
         if (!testFile.exists()) {
             try {
-                testFile.getParentFile().mkdirs();
-                PrintWriter writer = new PrintWriter(testFile);
+                if (testFile.getParentFile() != null) {
+                    if (!testFile.getParentFile().mkdirs() && !testFile.getParentFile().exists()) {
+                        System.err.println("警告：无法创建测试文件的父目录：" + testFile.getParentFile().getPath());
+                    }
+                }
+                PrintWriter writer = new PrintWriter(testFile, "UTF-8");
                 writer.println("This is a test file. It contains some sample text for graph generation.");
                 writer.println("The quick brown fox jumps over the lazy dog.");
                 writer.close();
@@ -84,9 +133,18 @@ public class TextToGraph {
             allwords = graphBuilder.showDirectedGraph(graphBuilder, filePath, dotFilePath, imageFilePath);
         } catch (IOException e) {
             e.printStackTrace();
+            System.err.println("无法生成有向图，程序将退出");
+            System.exit(1); // 遇到严重错误时退出程序
         }
+        
+        // 添加空值检查
+        if (allwords == null || allwords.length == 0) {
+            System.err.println("未能正确读取文件内容，程序将退出");
+            System.exit(1);
+        }
+        
         String root = allwords[0];
-        Scanner scanner = new Scanner(System.in);
+        Scanner scanner = new Scanner(System.in, "UTF-8");
         while (true) {
             try {
                 while(System.in.available() > 0)
@@ -234,7 +292,27 @@ public class TextToGraph {
         StringBuilder content = new StringBuilder();
         boolean rootSet = false; // 标志是否已经设置根节点
         String rootWord = null; // 根节点的单词
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(filePath), "UTF-8"))) {
+        
+        // 安全检查
+        // 安全检查
+        File file = new File(filePath);
+        if (!file.exists()) {
+        throw new IOException("文件不存在: " + filePath);
+        }
+        
+        String canonicalPath = file.getCanonicalPath();
+        File baseDir = new File("./test").getCanonicalFile();
+        
+        // 检查文件是否在允许的目录内
+        if (!canonicalPath.startsWith(baseDir.getCanonicalPath())) {
+            // 如果不在允许目录内，但是在当前目录下，也可以接受
+            File currentDir = new File(".").getCanonicalFile();
+            if (!canonicalPath.startsWith(currentDir.getCanonicalPath())) {
+                throw new SecurityException("安全限制：只能访问当前目录或test目录下的文件");
+            }
+        }
+        
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(file), "UTF-8"))) {
             String line;
             while ((line = br.readLine()) != null) {
                 content.append(line).append(" "); // 将每行内容添加到 content 中，并添加空格作为单词间的分隔符
@@ -256,9 +334,14 @@ public class TextToGraph {
         return words;
     }
 
+    /**
+     * @param dotFilePath
+     * @param shortestPaths
+     * @param root
+     */
     // 修改createDotFile方法以支持多条最短路径的不同颜色显示
     public void createDotFile(String dotFilePath, List<List<Object>> shortestPaths, String root) {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(dotFilePath))) {
+        try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(dotFilePath), "UTF-8"))) {
             writer.println("digraph G {");
             writer.println("  rankdir=LR;");
             writer.println("  node [shape=circle, style=filled, fillcolor=white];");
@@ -323,7 +406,9 @@ public class TextToGraph {
             // 创建目录确保可以写入文件
             File imageFile = new File(imageFilePath);
             if (imageFile.getParentFile() != null) {
-                imageFile.getParentFile().mkdirs();
+                if (!imageFile.getParentFile().mkdirs() && !imageFile.getParentFile().exists()) {
+                    System.err.println("警告：无法创建图像目录：" + imageFile.getParentFile().getPath());
+                }
             }
             
             // 尝试使用 Graphviz
@@ -351,7 +436,7 @@ public class TextToGraph {
     public String generateNewText(String inputText) {
         StringBuilder newText = new StringBuilder();
         String[] words = inputText.split(" ");
-        Random random = new Random(); // 创建随机数生成器
+        SecureRandom secureRandom = new SecureRandom(); // 使用SecureRandom替代Random
 
         for (int i = 0; i < words.length - 1; i++) {
             String currentWord = words[i];
@@ -365,7 +450,7 @@ public class TextToGraph {
             if (bridgeWords != null && !bridgeWords.isEmpty()) {
                 // 如果存在桥接词，则随机选择一个插入到新文本中
                 List<String> bridgeWordsList = new ArrayList<>(bridgeWords);
-                String randomBridge = bridgeWordsList.get(random.nextInt(bridgeWordsList.size()));
+                String randomBridge = bridgeWordsList.get(secureRandom.nextInt(bridgeWordsList.size()));
                 newText.append(randomBridge).append(" ");
             }
         }
@@ -381,7 +466,7 @@ public class TextToGraph {
 
     // 查询桥接词
     public Set<String> queryBridgeWords(String start, String end, Boolean print) {
-        List<String> path = new ArrayList<>();
+        // 删除未使用的变量声明
         if (!directedGraph.containsKey(start) && print) {
             System.out.println("在图中没有\"" + start + "\"");
             return null;
@@ -564,7 +649,6 @@ public class TextToGraph {
            return shortestPaths;
        }
 
-    // 计算单词的PageRank值
     public Double calPageRank(String word) {
         if (!directedGraph.containsKey(word)) {
             System.out.println("在图中没有\"" + word + "\"");
@@ -575,9 +659,12 @@ public class TextToGraph {
         Map<String, Double> pageRank = new HashMap<>();
         Map<String, Double> newPageRank = new HashMap<>();
         
-        // 初始化所有节点的PageRank值为1.0
+        // 获取图中节点总数N
+        int N = directedGraph.size();
+        
+        // 初始化所有节点的PageRank值为1.0/N
         for (String node : directedGraph.keySet()) {
-            pageRank.put(node, 1.0);
+            pageRank.put(node, 1.0 / N);
         }
         
         // 阻尼系数d设为0.85
@@ -589,29 +676,43 @@ public class TextToGraph {
         for (int iter = 0; iter < maxIterations; iter++) {
             double diff = 0.0;
             
+            // 找出所有出度为0的节点
+            Set<String> sinkNodes = new HashSet<>();
+            for (Map.Entry<String, Map<String, Integer>> entry : directedGraph.entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    sinkNodes.add(entry.getKey());
+                }
+            }
+            
+            // 计算出度为0的节点的PageRank总和
+            double sinkPR = 0;
+            for (String sinkNode : sinkNodes) {
+                sinkPR += pageRank.get(sinkNode);
+            }
+            
             // 计算每个节点的新PageRank值
             for (String node : directedGraph.keySet()) {
                 double sum = 0.0;
                 
                 // 查找所有指向当前节点的节点
-                for (String sourceNode : directedGraph.keySet()) {
-                    if (directedGraph.get(sourceNode).containsKey(node)) {
-                        // 计算sourceNode对node的贡献
-                        int weight = directedGraph.get(sourceNode).get(node);
-                        int totalWeight = 0;
+                for (Map.Entry<String, Map<String, Integer>> sourceEntry : directedGraph.entrySet()) {
+                    String sourceNode = sourceEntry.getKey();
+                    Map<String, Integer> edges = sourceEntry.getValue();
+                    
+                    if (edges.containsKey(node)) {
+                        // 计算sourceNode的出度L(v)
+                        int outDegree = edges.size();
                         
-                        // 计算sourceNode的出边总权重
-                        for (int outWeight : directedGraph.get(sourceNode).values()) {
-                            totalWeight += outWeight;
-                        }
-                        
-                        // 加权贡献
-                        sum += pageRank.get(sourceNode) * ((double) weight / totalWeight);
+                        // 累加PR(v)/L(v)
+                        sum += pageRank.get(sourceNode) / outDegree;
                     }
                 }
                 
-                // 计算新的PageRank值
-                double newRank = (1 - d) + d * sum;
+                // 添加来自出度为0的节点的贡献
+                sum += sinkPR / N;
+                
+                // 计算新的PageRank值：PR(u) = (1-d)/N + d*sum
+                double newRank = (1 - d) / N + d * sum;
                 newPageRank.put(node, newRank);
                 
                 // 计算与上一次迭代的差异
@@ -634,14 +735,15 @@ public class TextToGraph {
 
     public String randomWalk() {
         // 选择随机起点
-        Random random = new Random();
+        SecureRandom secureRandom = new SecureRandom(); // 使用SecureRandom替代Random
         List<String> vertices = new ArrayList<>(directedGraph.keySet());
-        String currentVertex = vertices.get(random.nextInt(vertices.size()));
+        String currentVertex = vertices.get(secureRandom.nextInt(vertices.size()));
 
         StringBuilder randomWalkText = new StringBuilder();
-        // 记录遍历的节点和边
+        // 记录遍历的节点
         List<String> visitedVertices = new ArrayList<>();
-        List<String> visitedEdges = new ArrayList<>();
+        // 删除无用的边列表
+        // List<String> visitedEdges = new ArrayList<>();
 
         // 开始随机游走
         while (!stopWalk) {
@@ -649,9 +751,10 @@ public class TextToGraph {
             Map<String, Integer> edges = directedGraph.get(currentVertex);
             if (edges != null && !edges.isEmpty()) {
                 List<String> nextVertices = new ArrayList<>(edges.keySet());
-                String nextVertex = nextVertices.get(random.nextInt(nextVertices.size()));
+                String nextVertex = nextVertices.get(secureRandom.nextInt(nextVertices.size()));
                 String edge = currentVertex + " -> " + nextVertex;
-                visitedEdges.add(edge);
+                // 删除对无用列表的操作
+                // visitedEdges.add(edge);
                 currentVertex = nextVertex;
 
                 // 模拟延迟以便于演示
@@ -667,7 +770,7 @@ public class TextToGraph {
 
         // 将遍历的节点输出为文本，并以文件形式写入磁盘
         String outputPath = "./random_walk.txt";
-        try (PrintWriter writer = new PrintWriter(new FileWriter(outputPath))) {
+        try (PrintWriter writer = new PrintWriter(new OutputStreamWriter(new FileOutputStream(outputPath), "UTF-8"))) {
             writer.println("随机游走的节点:");
             for (String vertex : visitedVertices) {
                 randomWalkText.append(vertex).append(" ");
