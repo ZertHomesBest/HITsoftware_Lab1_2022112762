@@ -1,0 +1,35 @@
+digraph G {
+  rankdir=LR;
+  node [shape=circle, style=filled, fillcolor=white];
+  "to" [fillcolor=red];
+  "new" -> "worlds" [label="1"];
+  "new" -> "civilizations" [label="1"];
+  "new" -> "life" [label="1"];
+  "worlds" -> "to" [label="1"];
+  "explore" -> "strange" [label="1"];
+  "and" -> "new" [label="1"];
+  "to" -> "explore" [label="1"];
+  "to" -> "seek" [label="1"];
+  "seek" -> "out" [label="1"];
+  "strange" -> "new" [label="1"];
+  "life" -> "and" [label="1"];
+  "out" -> "new" [label="1"];
+  "to" [fillcolor="blue20"];
+  "explore" [fillcolor="blue20"];
+  "strange" [fillcolor="blue20"];
+  "new" [fillcolor="blue20"];
+  "worlds" [fillcolor="blue20"];
+  "to" -> "explore" [color="blue", penwidth=2.0];
+  "explore" -> "strange" [color="blue", penwidth=2.0];
+  "strange" -> "new" [color="blue", penwidth=2.0];
+  "new" -> "worlds" [color="blue", penwidth=2.0];
+  "to" [fillcolor="green20"];
+  "seek" [fillcolor="green20"];
+  "out" [fillcolor="green20"];
+  "new" [fillcolor="green20"];
+  "worlds" [fillcolor="green20"];
+  "to" -> "seek" [color="green", penwidth=2.0];
+  "seek" -> "out" [color="green", penwidth=2.0];
+  "out" -> "new" [color="green", penwidth=2.0];
+  "new" -> "worlds" [color="green", penwidth=2.0];
+}
